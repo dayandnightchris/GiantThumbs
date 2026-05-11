@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'ime_channel.dart';
 import 'key_data.dart';
 import 'keyboard_view.dart';
 import 'settings_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const GiantThumbsApp());
 }
 
@@ -42,9 +44,20 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   int _columns = 3;
   double _opacity = 0.40;
 
+  @override
+  void initState() {
+    super.initState();
+    ImeChannel.init(_openSettings);
+  }
+
   void _onGlyph(String g) {
-    setState(() => _output.add(g));
-    HapticFeedback.lightImpact();
+    // In IME mode, send to the focused field; otherwise show locally.
+    if (ImeChannel.isImeMode) {
+      ImeChannel.commitText(g);
+    } else {
+      setState(() => _output.add(g));
+      HapticFeedback.lightImpact();
+    }
   }
 
   void _openSettings() {
