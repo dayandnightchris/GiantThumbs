@@ -51,12 +51,27 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   }
 
   void _onGlyph(String g) {
+    if (g == '⌫') {
+      _onDelete();
+      return;
+    }
     // In IME mode, send to the focused field; otherwise show locally.
     if (ImeChannel.isImeMode) {
       ImeChannel.commitText(g);
     } else {
       setState(() => _output.add(g));
       HapticFeedback.lightImpact();
+    }
+  }
+
+  void _onDelete() {
+    if (ImeChannel.isImeMode) {
+      ImeChannel.deleteLast();
+    } else {
+      if (_output.isNotEmpty) {
+        setState(() => _output.removeLast());
+      }
+      HapticFeedback.mediumImpact();
     }
   }
 
@@ -98,6 +113,7 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
               Expanded(
                 flex: 2,
                 child: SafeArea(
+                  bottom: false,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Align(
@@ -115,13 +131,16 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
               ),
               // Keyboard area
               Expanded(
-                flex: 3,
-                child: KeyboardView(
-                  keys: defaultKeys,
-                  columns: _columns,
-                  opacity: _opacity,
-                  onGlyph: _onGlyph,
-                  onSettings: _openSettings,
+                flex: 8,
+                child: SafeArea(
+                  top: false,
+                  child: KeyboardView(
+                    keys: defaultKeys,
+                    columns: _columns,
+                    opacity: _opacity,
+                    onGlyph: _onGlyph,
+                    onSettings: _openSettings,
+                  ),
                 ),
               ),
             ],
