@@ -4,6 +4,7 @@ import 'ime_channel.dart';
 import 'key_data.dart';
 import 'keyboard_view.dart';
 import 'settings_screen.dart';
+import 'word_predictor.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,18 +44,31 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   final List<String> _output = [];
   int _columns = 3;
   double _opacity = 0.40;
+  List<BranchNode> _keys = defaultKeys;
+  final WordPredictor _predictor = WordPredictor();
+  // Accumulates individual letter commits so we know when a word ends.
+  String _currentWord = '';
 
   @override
   void initState() {
     super.initState();
     ImeChannel.init(_openSettings);
+    _loadWordPredictor();
+  }
+
+  Future<void> _loadWordPredictor() async {
+    await _predictor.load(rootBundle);
+    if (mounted) {
+      setState(() => _keys = buildKeys(_predictor));
+    }
   }
 
   void _onGlyph(String g) {
-    if (g == '⌫') {
+    if (g == '\u232b') {
       _onDelete();
       return;
     }
+    _trackWordBoundary(g);
     // In IME mode, send to the focused field; otherwise show locally.
     if (ImeChannel.isImeMode) {
       ImeChannel.commitText(g);
@@ -64,7 +78,34 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
     }
   }
 
+  static const _wordEnders = ' \n.,?!;:';
+
+  /// Tracks word boundaries and updates prediction context accordingly.
+  /// Called for every committed glyph before it is sent to the output.
+  void _trackWordBoundary(String g) {
+    if (g.length > 1) {
+      // Multi-char commit from a word-prediction branch — this IS a full word.
+      _predictor.updateContext(g);
+      _currentWord = '';
+      setState(() => _keys = buildKeys(_predictor));
+    } else if (_wordEnders.contains(g)) {
+      if (_currentWord.isNotEmpty) {
+        _predictor.updateContext(_currentWord);
+        _currentWord = '';
+        setState(() => _keys = buildKeys(_predictor));
+      }
+      // Clear context after sentence-ending punctuation.
+      if ('.?!'.contains(g)) _predictor.clearContext();
+    } else {
+      _currentWord += g;
+    }
+  }
+
   void _onDelete() {
+    // Keep the word accumulator in sync with what is actually on screen.
+    if (_currentWord.isNotEmpty) {
+      _currentWord = _currentWord.substring(0, _currentWord.length - 1);
+    }
     if (ImeChannel.isImeMode) {
       ImeChannel.deleteLast();
     } else {
@@ -135,7 +176,7 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
                 child: SafeArea(
                   top: false,
                   child: KeyboardView(
-                    keys: defaultKeys,
+                    keys: _keys,
                     columns: _columns,
                     opacity: _opacity,
                     onGlyph: _onGlyph,

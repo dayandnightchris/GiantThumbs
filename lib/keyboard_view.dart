@@ -31,13 +31,22 @@ class _KeyboardViewState extends State<KeyboardView> {
   int? _hoveredIndex;
   int? _pressedIndex;
   Timer? _branchTimer;
+  Timer? _settingsTimer;
   bool _isBranching = false;
+  bool _settingsOpened = false;
 
   @override
   void initState() {
     super.initState();
     _activeNodes = List.from(widget.keys);
     while (_activeNodes.length < 12) _activeNodes.add(null);
+  }
+
+  @override
+  void dispose() {
+    _branchTimer?.cancel();
+    _settingsTimer?.cancel();
+    super.dispose();
   }
 
   void _handlePointerDown(PointerDownEvent e, BoxConstraints constraints) {
@@ -48,6 +57,14 @@ class _KeyboardViewState extends State<KeyboardView> {
       _hoveredIndex = index;
     });
     _startBranchTimer(index);
+    // Long-press on # opens settings; tap will trigger backspace instead.
+    if (index < _activeNodes.length && _activeNodes[index]?.glyph == '#') {
+      _settingsOpened = false;
+      _settingsTimer = Timer(const Duration(milliseconds: 600), () {
+        setState(() => _settingsOpened = true);
+        widget.onSettings();
+      });
+    }
   }
 
   void _handlePointerMove(PointerMoveEvent e, BoxConstraints constraints) {
@@ -60,11 +77,18 @@ class _KeyboardViewState extends State<KeyboardView> {
 
   void _handlePointerUp(PointerUpEvent e) {
     _branchTimer?.cancel();
+    _settingsTimer?.cancel();
+    _settingsTimer = null;
     if (_hoveredIndex != null && _hoveredIndex! < _activeNodes.length) {
       final node = _activeNodes[_hoveredIndex!];
       if (node != null) {
-        if (node.glyph == '#') widget.onSettings();
-        else {
+        if (node.glyph == '#') {
+          // Tap = backspace; hold (600 ms) already opened settings via timer.
+          if (!_settingsOpened) {
+            widget.onGlyph('⌫');
+            HapticFeedback.lightImpact();
+          }
+        } else {
           widget.onGlyph(node.glyph);
           HapticFeedback.lightImpact();
         }
@@ -140,6 +164,9 @@ class _KeyboardViewState extends State<KeyboardView> {
   }
 
   void _resetGrid() {
+    _settingsTimer?.cancel();
+    _settingsTimer = null;
+    _settingsOpened = false;
     setState(() {
       _activeNodes = List.from(widget.keys);
       while (_activeNodes.length < 12) _activeNodes.add(null);

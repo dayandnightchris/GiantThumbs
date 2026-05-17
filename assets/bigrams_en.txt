@@ -1,0 +1,101 @@
+# English bigrams: most common words that follow each trigger word.
+# Format:  word1<TAB>follower1,follower2,follower3,...
+# Followers are ordered by bigram frequency (most likely first).
+# Source: derived from public-domain corpus data.
+# Case-insensitive: all entries are lowercase.
+
+# ── Pronouns ──────────────────────────────────────────────────────────────────
+i	am,was,think,want,have,will,can,know,need,feel,just,still,didn't,don't,can't,told,wish,tried,believe,said
+you	can,are,know,have,will,want,need,should,don't,might,could,think,said,told,get,go,see,like,make,feel
+he	said,was,had,would,could,might,should,will,has,didn't,can't,knew,told,felt,went,came,looked,seemed,thought,got
+she	said,was,had,would,could,might,should,will,has,didn't,knew,told,felt,went,came,looked,seemed,thought,got
+we	are,were,can,could,should,will,would,have,had,don't,need,want,all,just,go,get,know,see,think,feel
+they	are,were,can,could,should,will,would,have,had,don't,want,said,told,knew,went,came,got,seem,think
+it	is,was,will,would,can,has,had,should,could,might,seems,looks,feels,also,just,does,did,takes,gets,makes
+i'm	not,going,sure,sorry,glad,happy,afraid,just,really,so,fine,ready,trying,looking,thinking
+i'll	be,have,try,make,get,go,see,do,take,let,put,give,come,call,send,tell,show
+i've	been,got,never,always,seen,heard,tried,done,had,known,told,said,found
+i'd	like,love,rather,prefer,suggest,say,think,guess,need,want,be
+you're	right,welcome,going,not,so,the,a,very,really,sure,just
+they're	going,not,the,a,very,really,just,still,so,already,always
+
+# ── Articles ─────────────────────────────────────────────────────────────────
+the	same,best,first,most,only,next,last,other,whole,right,world,way,time,new,real,end,fact,good,big,great,full,top,main,key
+a	lot,bit,good,great,few,little,new,big,long,small,man,woman,day,real,bad,very,short,clear,brief,simple,common,quick
+an	important,interesting,easy,excellent,issue,option,opportunity,idea,example,answer,old,open,obvious,order,exact,entire
+
+# ── Conjunctions / connectors ────────────────────────────────────────────────
+and	the,then,also,so,in,for,of,to,it,a,they,he,she,we,all,not,that,this,what,when,where,why,how
+but	the,I,it,he,she,we,they,not,also,still,then,that,this,what,if,a,you,there,now,actually
+or	a,the,not,so,just,even,maybe,perhaps,something,someone,it,that,this,what,how,when
+so	much,many,far,long,well,good,great,bad,that,what,I,we,it,the,a,far,very,just
+if	you,I,we,they,it,this,that,the,he,she,not,so,there,possible,needed,true
+because	it,I,you,we,they,the,of,there,that,this,he,she,something,nothing,everything
+when	you,I,we,they,it,this,the,he,she,did,was,is,had,would,could
+although	I,it,the,this,that,he,she,we,they,some,not
+either	way,side,case,the,that,this,a
+
+# ── Prepositions ─────────────────────────────────────────────────────────────
+in	the,a,this,that,my,our,your,their,order,fact,general,case,some,part,addition,terms,short
+of	the,a,this,that,course,my,our,your,their,his,her,it,all,those,these
+to	the,a,be,do,get,make,know,see,go,have,find,use,say,take,come,keep,work,put,give,send
+for	the,a,me,you,him,her,them,us,this,that,some,all,any,example,now,ever,sure,free,good
+with	the,a,my,his,her,their,our,your,this,that,some,all,both,no,just,great,full
+at	the,a,this,that,least,first,last,all,home,work,school,some,it,best,most,once
+on	the,a,this,that,my,our,your,their,top,time,one,both,end,board
+from	the,a,my,our,your,their,this,that,there,here,it,all,both,now
+about	the,a,this,that,it,what,how,why,when,where,my,your,their,all
+into	the,a,this,that,it,my,our,your,their,account,consideration
+through	the,a,this,that,it,all,my,our,your,their
+
+# ── Common verbs / auxiliaries ───────────────────────────────────────────────
+is	the,a,this,that,it,very,so,not,just,still,also,really,quite,actually,now,always,already,good,great
+are	the,a,not,still,now,always,just,really,very,so,they,you,we,there,some,all,many
+was	a,the,very,so,just,not,quite,rather,really,already,always,still,never,good,great
+were	the,a,not,so,just,very,really,quite,rather,already,always,never,there,all
+have	to,a,the,been,no,not,some,my,your,their,any,all,just,never,always,good,great
+has	been,to,a,the,no,not,some,just,never,always,already,said,done,made,given
+had	to,a,the,no,not,some,just,never,been,always,already,said,done,made,given
+will	be,have,do,get,make,go,see,come,take,give,need,help,try,keep,find,say,show
+would	be,have,do,like,say,get,make,go,see,come,take,need,help,rather,suggest,recommend
+could	be,have,do,get,make,see,go,come,take,need,help,work,say,tell,find,mean
+should	be,have,do,get,make,see,go,come,take,note,know,think,try,ask,check
+can	be,do,get,make,see,go,come,take,help,think,try,say,tell,find,use,work
+did	you,he,she,they,it,not,so,what,that,the,a,we,I
+does	it,not,that,the,this,anyone,anything,someone,something,well,he,she
+didn't	know,say,want,have,see,mean,think,expect,realize,understand
+don't	know,want,have,think,see,need,care,worry,understand,believe,forget
+won't	be,have,do,get,make,see,go,take,say,tell,work,let
+think	about,of,that,it,you,the,a,so,I,we,they,this,there,we're
+know	that,what,how,when,where,why,it,the,if,you're,I'm,we're
+want	to,the,a,you,it,that,this,all,more,some,my,your
+need	to,the,a,it,that,this,all,more,some,my,your,help,time
+get	the,a,to,it,that,this,some,more,your,my,there,here,back,ready,going
+got	the,a,to,it,that,this,some,more,your,my,there,here,back,going,so
+go	to,back,get,through,the,on,out,in,home,there,here,now
+make	the,a,it,that,this,sure,sense,clear,your,my,things,them,good
+see	the,a,that,this,it,what,you,if,how,when,there,here
+let	me,it,the,a,that,this,go,know,them,him,her,us,them
+
+# ── Common adverbs / negation ────────────────────────────────────────────────
+not	the,a,be,have,do,get,know,see,go,make,come,find,want,need,sure,really,quite,very,just,that
+just	want,need,can,don't,going,like,said,told,know,think,feel,got,came,make,the,a,be,do
+still	the,a,not,going,very,really,just,so,too,here,there,need,want,have
+also	the,a,not,very,be,have,can,want,need,known,found,seen,said,helped
+now	I,we,it,they,that,what,the,a,can,could,should,will,would,just,let's
+then	the,a,I,you,he,she,we,they,it,not,just,so,there,again
+always	be,have,been,will,want,need,the,a,my,your,their,our,go,try
+never	the,a,be,have,seen,known,done,said,thought,felt,wanted,needed,really,quite
+really	the,a,not,very,quite,so,good,great,well,bad,need,want,think,believe,like
+very	the,a,much,well,good,great,nice,few,little,big,small,different,important,clear,specific
+
+# ── Common question words ─────────────────────────────────────────────────────
+what	do,did,does,is,was,are,were,can,could,would,will,should,happened,the,a,you,I,we,they,he,she
+how	do,did,does,is,was,are,were,can,could,would,will,should,much,many,long,well,great
+why	do,did,does,is,was,are,were,can,could,would,will,should,not,the
+when	do,did,does,is,was,are,were,can,could,would,will,should,the,a
+where	do,did,does,is,was,are,were,can,could,would,will,should,the,a
+who	is,was,are,were,can,could,would,will,should,the,a,have,had,did,do
+that's	the,a,not,great,good,right,just,what,why,how,very,really,so,true,correct,interesting,exactly,fine
+there's	a,the,no,nothing,something,always,never,so,still,also,not,only,really,just
+it's	the,a,not,very,so,just,really,quite,been,going,hard,easy,good,great,bad,true
