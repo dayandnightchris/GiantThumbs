@@ -238,6 +238,6 @@ const List<BranchNode> defaultKeys = [
     BranchNode('('), BranchNode(')'), BranchNode('@'),
     BranchNode(r'$'), BranchNode('&'),
   ]),
-  // ── Settings (#): tap = ⌫, hold = settings ────────────────────────────────
-  BranchNode('#', children: []),
+  // ── Settings (⌫): tap = ⌫, hold = settings ─────────────────────────────
+  BranchNode('⌫', children: []),
 ];

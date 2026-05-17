@@ -57,8 +57,8 @@ class _KeyboardViewState extends State<KeyboardView> {
       _hoveredIndex = index;
     });
     _startBranchTimer(index);
-    // Long-press on # opens settings; tap will trigger backspace instead.
-    if (index < _activeNodes.length && _activeNodes[index]?.glyph == '#') {
+    // Long-press on ⌫ (top-level only) opens settings; tap triggers backspace.
+    if (!_isBranching && index < _activeNodes.length && _activeNodes[index]?.glyph == '⌫') {
       _settingsOpened = false;
       _settingsTimer = Timer(const Duration(milliseconds: 600), () {
         setState(() => _settingsOpened = true);
@@ -82,8 +82,8 @@ class _KeyboardViewState extends State<KeyboardView> {
     if (_hoveredIndex != null && _hoveredIndex! < _activeNodes.length) {
       final node = _activeNodes[_hoveredIndex!];
       if (node != null) {
-        if (node.glyph == '#') {
-          // Tap = backspace; hold (600 ms) already opened settings via timer.
+        if (node.glyph == '⌫') {
+          // Tap = backspace; hold (600 ms, top-level only) already opened settings via timer.
           if (!_settingsOpened) {
             widget.onGlyph('⌫');
             HapticFeedback.lightImpact();
@@ -115,48 +115,67 @@ class _KeyboardViewState extends State<KeyboardView> {
       final pRow = parentIndex ~/ widget.columns;
       final pCol = parentIndex % widget.columns;
 
-      // Define patterns of relative offsets for pairs
-      // Pair 1: Right, Pair 2: Diag, Pair 3: Down, Pair 4: Misc
-      final List<Offset> offsets = [
-        const Offset(0, 1), const Offset(0, 2),   // a, A
-        const Offset(1, 1), const Offset(2, 2),   // b, B
-        const Offset(1, 0), const Offset(2, 0),   // c, C
-        const Offset(1, -1), const Offset(2, -2), // misc/D
-        const Offset(2, 1), const Offset(1, 2),
-      ];
+      final cols = widget.columns;
 
-      int childIdx = 0;
-      for (var offset in offsets) {
-        if (childIdx >= node.children.length) break;
+      // Build a line of cells from the parent in a given direction.
+      List<int> line(int dRow, int dCol) {
+        final cells = <int>[];
+        int r = pRow + dRow, c = pCol + dCol;
+        while (r >= 0 && r < 4 && c >= 0 && c < cols) {
+          cells.add(r * cols + c);
+          r += dRow;
+          c += dCol;
+        }
+        return cells;
+      }
 
-        int targetRow = pRow + offset.dy.toInt();
-        int targetCol = pCol + offset.dx.toInt();
-
-        // If off-screen, try to flip the offset (e.g. if too far right, go left)
-        if (targetCol >= widget.columns) targetCol = pCol - (targetCol - pCol);
-        if (targetCol < 0) targetCol = pCol + (pCol - targetCol);
-        if (targetRow >= 4) targetRow = pRow - (targetRow - pRow);
-        if (targetRow < 0) targetRow = pRow + (pRow - targetRow);
-
-        // Clamp to valid grid
-        targetRow = targetRow.clamp(0, 3);
-        targetCol = targetCol.clamp(0, widget.columns - 1);
-
-        int targetIdx = targetRow * widget.columns + targetCol;
-
-        // Don't overwrite parent or already filled slot
-        if (targetIdx != parentIndex && newNodes[targetIdx] == null) {
-          newNodes[targetIdx] = node.children[childIdx];
-          childIdx++;
+      final candidates = <int>[];
+      final placed = <int>{};
+      void addCells(List<int> cells) {
+        for (final idx in cells) {
+          if (placed.add(idx)) candidates.add(idx);
         }
       }
 
-      // Fill any remaining children in empty spots
-      for (int i = 0; i < 12 && childIdx < node.children.length; i++) {
-        if (newNodes[i] == null) {
-          newNodes[i] = node.children[childIdx];
-          childIdx++;
-        }
+      final isCorner = (pRow == 0 || pRow == 3) && (pCol == 0 || pCol == cols - 1);
+      if (isCorner) {
+        // Corner keys get three radiating lines:
+        //   1. Short horizontal spoke (2 cells)  → first letter pair  (e.g. a, A)
+        //   2. Corner diagonal (2 cells)          → second letter pair (e.g. b, B)
+        //   3. Long vertical spoke (3 cells)      → third pair + extra (e.g. c, C, …)
+        final dRow = pRow == 0 ? 1 : -1;
+        final dCol = pCol == 0 ? 1 : -1;
+        addCells(line(0, dCol));    // horizontal
+        addCells(line(dRow, dCol)); // corner diagonal
+        addCells(line(dRow, 0));    // vertical
+      } else {
+        // Non-corner keys: cardinal spokes longest-first so consecutive
+        // children stay cardinally adjacent.
+        final spokes = [
+          line(0, 1), line(1, 0), line(0, -1), line(-1, 0),
+        ]..sort((a, b) => b.length.compareTo(a.length));
+        for (final s in spokes) addCells(s);
+      }
+
+      // Overflow: any unplaced cells, nearest-first.
+      final overflow = <int>[];
+      for (int i = 0; i < 12; i++) {
+        if (i != parentIndex && !placed.contains(i)) overflow.add(i);
+      }
+      overflow.sort((a, b) {
+        final aRow = a ~/ cols, aCol = a % cols;
+        final bRow = b ~/ cols, bCol = b % cols;
+        final aDist = (aRow - pRow) * (aRow - pRow) + (aCol - pCol) * (aCol - pCol);
+        final bDist = (bRow - pRow) * (bRow - pRow) + (bCol - pCol) * (bCol - pCol);
+        return aDist.compareTo(bDist);
+      });
+      candidates.addAll(overflow);
+
+      final limit = candidates.length < node.children.length
+          ? candidates.length
+          : node.children.length;
+      for (int i = 0; i < limit; i++) {
+        newNodes[candidates[i]] = node.children[i];
       }
 
       _activeNodes = newNodes;
