@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'layout_store.dart';
 
 class SettingsScreen extends StatefulWidget {
-  final int columns;
-  final double opacity;
-  final void Function(int columns, double opacity) onSave;
+  final KeyboardSettings settings;
+  final void Function(KeyboardSettings settings) onSave;
+  final VoidCallback onEditLayout;
 
   const SettingsScreen({
     super.key,
-    required this.columns,
-    required this.opacity,
+    required this.settings,
     required this.onSave,
+    required this.onEditLayout,
   });
 
   @override
@@ -19,12 +20,22 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late int _columns;
   late double _opacity;
+  late double _drillDelay;
 
   @override
   void initState() {
     super.initState();
-    _columns = widget.columns;
-    _opacity = widget.opacity;
+    _columns = widget.settings.columns;
+    _opacity = widget.settings.opacity;
+    _drillDelay = widget.settings.drillDelayMs.toDouble();
+  }
+
+  void _save() {
+    widget.onSave(KeyboardSettings(
+      columns: _columns,
+      opacity: _opacity,
+      drillDelayMs: _drillDelay.round(),
+    ));
   }
 
   @override
@@ -34,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Giant Thumbs — Settings'),
         actions: [
           TextButton(
-            onPressed: () => widget.onSave(_columns, _opacity),
+            onPressed: _save,
             child: const Text('Save', style: TextStyle(color: Colors.tealAccent)),
           ),
         ],
@@ -42,7 +53,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const Text('Layout', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Layout',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -59,8 +71,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: widget.onEditLayout,
+            icon: const Icon(Icons.grid_view),
+            label: const Text('Edit key layout…'),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Choose exactly what glyph goes in every tile and branch.',
+            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+          ),
           const SizedBox(height: 32),
-          const Text('Transparency', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+
+          const Text('Speed',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(
+            'The first branch is always instant. This sets how long you dwell on '
+            'a letter before it opens its word predictions.',
+            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+          ),
+          Row(
+            children: [
+              const Text('Instant'),
+              Expanded(
+                child: Slider(
+                  value: _drillDelay,
+                  min: 0,
+                  max: 600,
+                  divisions: 12,
+                  label: _drillDelay.round() == 0
+                      ? 'Instant'
+                      : '${_drillDelay.round()} ms',
+                  onChanged: (v) => setState(() => _drillDelay = v),
+                ),
+              ),
+              const Text('Relaxed'),
+            ],
+          ),
+          Center(
+            child: Text(
+              _drillDelay.round() == 0
+                  ? 'Drill delay: instant'
+                  : 'Drill delay: ${_drillDelay.round()} ms',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          const Text('Transparency',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -88,7 +149,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 32),
 
           // Key preview
-          const Text('Preview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Preview',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Container(
             height: 80,

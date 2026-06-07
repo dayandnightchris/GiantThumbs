@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'ime_channel.dart';
 import 'key_data.dart';
 import 'keyboard_view.dart';
+import 'layout_editor_screen.dart';
+import 'layout_store.dart';
 import 'settings_screen.dart';
 import 'word_predictor.dart';
 
@@ -42,10 +44,16 @@ class KeyboardDemoPage extends StatefulWidget {
 
 class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   final List<String> _output = [];
-  int _columns = 3;
-  double _opacity = 0.40;
-  List<BranchNode> _keys = defaultKeys;
+
+  KeyboardSettings _settings = KeyboardSettings();
+
+  /// The user's custom layout, or null when they use the predictor-built
+  /// default. Word predictions are layered on top of this at runtime.
+  List<BranchNode>? _customLayout;
+
+  List<BranchNode> _keys = defaultKeys();
   final WordPredictor _predictor = WordPredictor();
+
   // Accumulates individual letter commits so we know when a word ends.
   String _currentWord = '';
 
@@ -53,18 +61,35 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   void initState() {
     super.initState();
     ImeChannel.init(_openSettings);
-    _loadWordPredictor();
+    _bootstrap();
   }
 
-  Future<void> _loadWordPredictor() async {
-    await _predictor.load(rootBundle);
-    if (mounted) {
-      setState(() => _keys = buildKeys(_predictor));
+  Future<void> _bootstrap() async {
+    // Settings/layout persistence may be unavailable (e.g. in widget tests);
+    // fall back to defaults rather than crashing startup.
+    KeyboardSettings settings = KeyboardSettings();
+    List<BranchNode>? layout;
+    try {
+      settings = await LayoutStore.loadSettings();
+      layout = await LayoutStore.loadLayout();
+    } catch (_) {
+      // Keep defaults.
     }
+    await _predictor.load(rootBundle);
+    if (!mounted) return;
+    setState(() {
+      _settings = settings;
+      _customLayout = layout;
+      _keys = buildKeys(_predictor, base: _customLayout);
+    });
+  }
+
+  void _rebuildKeys() {
+    setState(() => _keys = buildKeys(_predictor, base: _customLayout));
   }
 
   void _onGlyph(String g) {
-    if (g == '\u232b') {
+    if (g == '⌫') {
       _onDelete();
       return;
     }
@@ -87,12 +112,12 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
       // Multi-char commit from a word-prediction branch — this IS a full word.
       _predictor.updateContext(g);
       _currentWord = '';
-      setState(() => _keys = buildKeys(_predictor));
+      _rebuildKeys();
     } else if (_wordEnders.contains(g)) {
       if (_currentWord.isNotEmpty) {
         _predictor.updateContext(_currentWord);
         _currentWord = '';
-        setState(() => _keys = buildKeys(_predictor));
+        _rebuildKeys();
       }
       // Clear context after sentence-ending punctuation.
       if ('.?!'.contains(g)) _predictor.clearContext();
@@ -119,14 +144,28 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   void _openSettings() {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => SettingsScreen(
-        columns: _columns,
-        opacity: _opacity,
-        onSave: (cols, op) {
-          setState(() {
-            _columns = cols;
-            _opacity = op;
-          });
+        settings: _settings,
+        onSave: (s) async {
+          await LayoutStore.saveSettings(s);
+          if (!mounted) return;
+          setState(() => _settings = s);
           Navigator.of(context).pop();
+        },
+        onEditLayout: _openLayoutEditor,
+      ),
+    ));
+  }
+
+  void _openLayoutEditor() {
+    // Edit the current effective layout (custom if set, otherwise the default
+    // structure without runtime predictions).
+    final base = _customLayout ?? defaultKeys();
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => LayoutEditorScreen(
+        initial: base,
+        onSaved: (layout) {
+          setState(() => _customLayout = layout);
+          _rebuildKeys();
         },
       ),
     ));
@@ -177,8 +216,9 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
                   top: false,
                   child: KeyboardView(
                     keys: _keys,
-                    columns: _columns,
-                    opacity: _opacity,
+                    columns: _settings.columns,
+                    opacity: _settings.opacity,
+                    drillDelayMs: _settings.drillDelayMs,
                     onGlyph: _onGlyph,
                     onSettings: _openSettings,
                   ),
