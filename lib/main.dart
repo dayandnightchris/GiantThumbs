@@ -61,7 +61,19 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   void initState() {
     super.initState();
     ImeChannel.init(_openSettings);
+    // Rebuild into keyboard-only mode the moment the IME host connects.
+    ImeChannel.imeMode.addListener(_onImeModeChanged);
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    ImeChannel.imeMode.removeListener(_onImeModeChanged);
+    super.dispose();
+  }
+
+  void _onImeModeChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _bootstrap() async {
@@ -142,6 +154,12 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   }
 
   void _openSettings() {
+    // Inside the IME window there's no room for a full settings screen — bounce
+    // out to the standalone app instead.
+    if (ImeChannel.isImeMode) {
+      ImeChannel.launchHostApp();
+      return;
+    }
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => SettingsScreen(
         settings: _settings,
@@ -163,6 +181,7 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => LayoutEditorScreen(
         initial: base,
+        columns: _settings.columns,
         onSaved: (layout) {
           setState(() => _customLayout = layout);
           _rebuildKeys();
@@ -171,21 +190,43 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
     ));
   }
 
+  /// Background gradient shared by the demo shell and the IME keyboard.
+  static const _backgroundGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF1a1a2e), Color(0xFF16213e)],
+  );
+
+  Widget _buildKeyboard() => KeyboardView(
+        keys: _keys,
+        columns: _settings.columns,
+        opacity: _settings.opacity,
+        drillDelayMs: _settings.drillDelayMs,
+        onGlyph: _onGlyph,
+        onSettings: _openSettings,
+      );
+
   @override
   Widget build(BuildContext context) {
+    // System-keyboard mode: render only the keyboard, filling the IME window
+    // (the native service sizes that window). No demo output box.
+    if (ImeChannel.isImeMode) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Container(
+          decoration: const BoxDecoration(gradient: _backgroundGradient),
+          child: SafeArea(top: false, child: _buildKeyboard()),
+        ),
+      );
+    }
+
     final typed = _output.join();
     return Scaffold(
       body: Stack(
         children: [
           // Fake background gradient
           Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF1a1a2e), Color(0xFF16213e)],
-              ),
-            ),
+            decoration: const BoxDecoration(gradient: _backgroundGradient),
           ),
           Column(
             children: [
@@ -212,17 +253,7 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
               // Keyboard area
               Expanded(
                 flex: 8,
-                child: SafeArea(
-                  top: false,
-                  child: KeyboardView(
-                    keys: _keys,
-                    columns: _settings.columns,
-                    opacity: _settings.opacity,
-                    drillDelayMs: _settings.drillDelayMs,
-                    onGlyph: _onGlyph,
-                    onSettings: _openSettings,
-                  ),
-                ),
+                child: SafeArea(top: false, child: _buildKeyboard()),
               ),
             ],
           ),

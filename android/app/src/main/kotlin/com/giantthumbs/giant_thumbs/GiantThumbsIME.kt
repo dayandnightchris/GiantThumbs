@@ -1,74 +1,114 @@
 package com.giantthumbs.giant_thumbs
 
+import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.widget.FrameLayout
+import io.flutter.embedding.android.FlutterTextureView
 import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 
+/**
+ * Hosts the Giant Thumbs Flutter UI as a system keyboard (IME).
+ *
+ * The keyboard runs on a dedicated FlutterEngine that is cached app-wide, so it
+ * opens fast on repeat use. That engine is intentionally *separate* from
+ * MainActivity's: the app and the keyboard can be foregrounded at the same time
+ * (e.g. typing into the layout editor's own text field while Giant Thumbs is the
+ * active keyboard), and a single engine can only be attached to one host — one
+ * shared instance would blank whichever side lost the attachment. Settings and
+ * the custom layout still stay in sync because both sides read them from storage.
+ */
 class GiantThumbsIME : InputMethodService() {
 
     private lateinit var flutterEngine: FlutterEngine
-    private lateinit var flutterView: FlutterView
-    private lateinit var channel: MethodChannel
-
-    companion object {
-        private const val CHANNEL = "com.giantthumbs/ime"
-    }
+    private var flutterView: FlutterView? = null
+    private var channel: MethodChannel? = null
 
     override fun onCreate() {
         super.onCreate()
-
-        flutterEngine = FlutterEngine(this)
-        flutterEngine.dartExecutor.executeDartEntrypoint(
-            DartExecutor.DartEntrypoint.createDefault()
-        )
-
-        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-
-        // Receive commit-text calls from Flutter
-        channel.setMethodCallHandler { call, result ->
-            when (call.method) {
-                "commitText" -> {
-                    val text = call.argument<String>("text") ?: ""
-                    currentInputConnection?.commitText(text, 1)
-                    result.success(null)
+        flutterEngine = cachedEngine()
+        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "commitText" -> {
+                        currentInputConnection?.commitText(call.argument<String>("text") ?: "", 1)
+                        result.success(null)
+                    }
+                    "deleteLast" -> {
+                        currentInputConnection?.deleteSurroundingText(1, 0)
+                        result.success(null)
+                    }
+                    "launchHostApp" -> {
+                        startActivity(
+                            Intent(this@GiantThumbsIME, MainActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                        result.success(null)
+                    }
+                    "imeClientReady" -> {
+                        // Dart's handler is now registered — hand it the mode
+                        // without racing engine startup.
+                        invokeMethod("setMode", mapOf("mode" to "ime"))
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
                 }
-                "deleteLast" -> {
-                    currentInputConnection?.deleteSurroundingText(1, 0)
-                    result.success(null)
-                }
-                "openSettings" -> {
-                    // surfacePackage — let the demo activity handle it on next launch
-                    result.success(null)
-                }
-                else -> result.notImplemented()
             }
         }
     }
 
     override fun onCreateInputView(): View {
-        flutterView = FlutterView(this)
-        flutterView.attachToFlutterEngine(flutterEngine)
-        // Tell Flutter which mode we're in (IME vs demo)
-        channel.invokeMethod("setMode", mapOf("mode" to "ime"))
-        return flutterView
+        val fv = FlutterView(this, FlutterTextureView(this))
+        fv.attachToFlutterEngine(flutterEngine)
+        flutterView = fv
+
+        // Claim a generous slice of the screen for the "giant thumbs" keyboard.
+        val container = FrameLayout(this)
+        val height = (resources.displayMetrics.heightPixels * KEYBOARD_HEIGHT_FRACTION).toInt()
+        container.addView(
+            fv,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height)
+        )
+        return container
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        flutterView.attachToFlutterEngine(flutterEngine)
+        // Drive Flutter rendering while the keyboard is visible, and (re)assert
+        // IME mode each time it shows.
+        flutterEngine.lifecycleChannel.appIsResumed()
+        channel?.invokeMethod("setMode", mapOf("mode" to "ime"))
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        flutterEngine.lifecycleChannel.appIsInactive()
         super.onFinishInputView(finishingInput)
-        flutterView.detachFromFlutterEngine()
     }
 
     override fun onDestroy() {
-        flutterEngine.destroy()
+        flutterView?.detachFromFlutterEngine()
+        flutterView = null
         super.onDestroy()
+    }
+
+    /** The shared, lazily-created keyboard engine (kept alive for fast reopen). */
+    private fun cachedEngine(): FlutterEngine {
+        FlutterEngineCache.getInstance().get(ENGINE_ID)?.let { return it }
+        val engine = FlutterEngine(applicationContext)
+        engine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
+        FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
+        return engine
+    }
+
+    companion object {
+        private const val ENGINE_ID = "giant_thumbs_ime_engine"
+        private const val CHANNEL = "com.giantthumbs/ime"
+        private const val KEYBOARD_HEIGHT_FRACTION = 0.55
     }
 }

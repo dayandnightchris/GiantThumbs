@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'key_data.dart';
+import 'grid_placement.dart';
 
 /// The live keyboard grid.
 ///
@@ -35,8 +36,9 @@ class KeyboardView extends StatefulWidget {
   });
 
   /// Total number of cells in the grid. The top-level layout has exactly this
-  /// many keys (1-9, *, 0, ⌫).
-  static const int cellCount = 12;
+  /// many keys (1-9, *, 0, ⌫). Shared with the layout editor via
+  /// [kKeyboardCellCount].
+  static const int cellCount = kKeyboardCellCount;
 
   @override
   State<KeyboardView> createState() => _KeyboardViewState();
@@ -54,7 +56,7 @@ class _KeyboardViewState extends State<KeyboardView> {
 
   /// Rows are derived from the column count so the grid always holds exactly
   /// [KeyboardView.cellCount] cells (2 cols → 6 rows, 3 → 4, 4 → 3).
-  int get _rows => (KeyboardView.cellCount / widget.columns).ceil();
+  int get _rows => rowsForColumns(widget.columns);
 
   @override
   void initState() {
@@ -160,82 +162,11 @@ class _KeyboardViewState extends State<KeyboardView> {
     setState(() {
       _isBranching = true;
       _history.add(List<BranchNode?>.from(_activeNodes));
-
-      final cols = widget.columns;
-      final rows = _rows;
-      final newNodes = List<BranchNode?>.filled(KeyboardView.cellCount, null);
-      newNodes[parentIndex] = node;
-
-      final pRow = parentIndex ~/ cols;
-      final pCol = parentIndex % cols;
-
-      // Build a line of cells radiating from the parent in a given direction.
-      List<int> line(int dRow, int dCol) {
-        final cells = <int>[];
-        int r = pRow + dRow, c = pCol + dCol;
-        while (r >= 0 && r < rows && c >= 0 && c < cols) {
-          cells.add(r * cols + c);
-          r += dRow;
-          c += dCol;
-        }
-        return cells;
-      }
-
-      final candidates = <int>[];
-      final placed = <int>{};
-      void addCells(List<int> cells) {
-        for (final idx in cells) {
-          if (placed.add(idx)) candidates.add(idx);
-        }
-      }
-
-      final isCorner =
-          (pRow == 0 || pRow == rows - 1) && (pCol == 0 || pCol == cols - 1);
-      if (isCorner) {
-        // Corner keys radiate along three lines: a short horizontal spoke, the
-        // corner diagonal, and a long vertical spoke. Keeps children spatially
-        // adjacent so muscle memory forms.
-        final dRow = pRow == 0 ? 1 : -1;
-        final dCol = pCol == 0 ? 1 : -1;
-        addCells(line(0, dCol)); // horizontal
-        addCells(line(dRow, dCol)); // corner diagonal
-        addCells(line(dRow, 0)); // vertical
-      } else {
-        // Non-corner keys: cardinal spokes longest-first so consecutive
-        // children stay cardinally adjacent.
-        final spokes = [
-          line(0, 1),
-          line(1, 0),
-          line(0, -1),
-          line(-1, 0),
-        ]..sort((a, b) => b.length.compareTo(a.length));
-        for (final s in spokes) {
-          addCells(s);
-        }
-      }
-
-      // Overflow: any unplaced cells, nearest-first.
-      final overflow = <int>[];
-      for (int i = 0; i < KeyboardView.cellCount; i++) {
-        if (i != parentIndex && !placed.contains(i)) overflow.add(i);
-      }
-      overflow.sort((a, b) {
-        final aRow = a ~/ cols, aCol = a % cols;
-        final bRow = b ~/ cols, bCol = b % cols;
-        final aDist = (aRow - pRow) * (aRow - pRow) + (aCol - pCol) * (aCol - pCol);
-        final bDist = (bRow - pRow) * (bRow - pRow) + (bCol - pCol) * (bCol - pCol);
-        return aDist.compareTo(bDist);
-      });
-      candidates.addAll(overflow);
-
-      final limit = candidates.length < node.children.length
-          ? candidates.length
-          : node.children.length;
-      for (int i = 0; i < limit; i++) {
-        newNodes[candidates[i]] = node.children[i];
-      }
-
-      _activeNodes = newNodes;
+      _activeNodes = placeBranch(
+        parent: node,
+        parentIndex: parentIndex,
+        columns: widget.columns,
+      );
     });
   }
 
@@ -276,8 +207,11 @@ class _KeyboardViewState extends State<KeyboardView> {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: widget.columns,
-            childAspectRatio: (constraints.maxWidth / widget.columns) /
-                (constraints.maxHeight / _rows),
+            childAspectRatio: cellAspectRatio(
+              width: constraints.maxWidth,
+              height: constraints.maxHeight,
+              columns: widget.columns,
+            ),
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
           ),
