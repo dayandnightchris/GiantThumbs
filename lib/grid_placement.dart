@@ -31,86 +31,66 @@ double cellAspectRatio({
   return ratio.isFinite && ratio > 0 ? ratio : 1.0;
 }
 
-/// The ordered list of candidate cell indices a branch's children fill when the
-/// user opens the branch of the key at [parentIndex], for the given [columns].
-/// The parent's own cell is excluded. Order matches the keyboard exactly:
-/// `children[i]` is placed in `result[i]`.
-///
-/// Corner parents radiate along three lines (a horizontal spoke, the corner
-/// diagonal, and a vertical spoke); edge/center parents radiate along cardinal
-/// spokes longest-first; any cells still unplaced follow nearest-first. This
-/// keeps a parent's children spatially adjacent so muscle memory forms.
-List<int> branchCandidateCells({
-  required int parentIndex,
-  required int columns,
-}) {
-  final cols = columns;
+// The 8 Moore-neighbour directions, clockwise from straight up, as [dRow, dCol].
+// Used as the placement order so children fan radially around the parent.
+const List<List<int>> _ringDirs = [
+  [-1, 0], // up
+  [-1, 1], // up-right
+  [0, 1], // right
+  [1, 1], // down-right
+  [1, 0], // down
+  [1, -1], // down-left
+  [0, -1], // left
+  [-1, -1], // up-left
+];
+
+/// The cells immediately adjacent to [parentIndex] (its up-to-8 Moore
+/// neighbours), ordered clockwise from straight up. These are where a branch's
+/// children should sit so each child is exactly one cell from the parent.
+List<int> immediateNeighbors(int parentIndex, int columns) {
   final rows = rowsForColumns(columns);
-  final pRow = parentIndex ~/ cols;
-  final pCol = parentIndex % cols;
-
-  // Build a line of cells radiating from the parent in a given direction.
-  List<int> line(int dRow, int dCol) {
-    final cells = <int>[];
-    int r = pRow + dRow, c = pCol + dCol;
-    while (r >= 0 && r < rows && c >= 0 && c < cols) {
-      final idx = r * cols + c;
-      if (idx < kKeyboardCellCount) cells.add(idx);
-      r += dRow;
-      c += dCol;
-    }
-    return cells;
-  }
-
-  final candidates = <int>[];
-  final placed = <int>{};
-  void addCells(List<int> cells) {
-    for (final idx in cells) {
-      if (placed.add(idx)) candidates.add(idx);
+  final pRow = parentIndex ~/ columns, pCol = parentIndex % columns;
+  final out = <int>[];
+  for (final d in _ringDirs) {
+    final r = pRow + d[0], c = pCol + d[1];
+    if (r >= 0 && r < rows && c >= 0 && c < columns) {
+      final idx = r * columns + c;
+      if (idx < kKeyboardCellCount) out.add(idx);
     }
   }
+  return out;
+}
 
-  final isCorner =
-      (pRow == 0 || pRow == rows - 1) && (pCol == 0 || pCol == cols - 1);
-  if (isCorner) {
-    final dRow = pRow == 0 ? 1 : -1;
-    final dCol = pCol == 0 ? 1 : -1;
-    addCells(line(0, dCol)); // horizontal
-    addCells(line(dRow, dCol)); // corner diagonal
-    addCells(line(dRow, 0)); // vertical
-  } else {
-    final spokes = [
-      line(0, 1),
-      line(1, 0),
-      line(0, -1),
-      line(-1, 0),
-    ]..sort((a, b) => b.length.compareTo(a.length));
-    for (final s in spokes) {
-      addCells(s);
-    }
-  }
-
-  // Overflow: any unplaced cells, nearest-first.
-  final overflow = <int>[];
+/// All cells that are neither the parent nor an immediate neighbour, nearest
+/// first. Leaf children spill here when the ring is full.
+List<int> outwardCells(int parentIndex, int columns) {
+  final ring = immediateNeighbors(parentIndex, columns).toSet();
+  final pRow = parentIndex ~/ columns, pCol = parentIndex % columns;
+  final out = <int>[];
   for (int i = 0; i < kKeyboardCellCount; i++) {
-    if (i != parentIndex && !placed.contains(i)) overflow.add(i);
+    if (i == parentIndex || ring.contains(i)) continue;
+    out.add(i);
   }
-  overflow.sort((a, b) {
-    final aRow = a ~/ cols, aCol = a % cols;
-    final bRow = b ~/ cols, bCol = b % cols;
+  out.sort((a, b) {
+    final aRow = a ~/ columns, aCol = a % columns;
+    final bRow = b ~/ columns, bCol = b % columns;
     final aDist = (aRow - pRow) * (aRow - pRow) + (aCol - pCol) * (aCol - pCol);
     final bDist = (bRow - pRow) * (bRow - pRow) + (bCol - pCol) * (bCol - pCol);
-    return aDist.compareTo(bDist);
+    final cmp = aDist.compareTo(bDist);
+    return cmp != 0 ? cmp : a.compareTo(b);
   });
-  candidates.addAll(overflow);
-  return candidates;
+  return out;
 }
 
 /// Builds the length-[kKeyboardCellCount] grid shown when [parent]'s branch is
-/// open: [parent] sits at [parentIndex] and its children fan out into the
-/// candidate cells. Cells with no content are null. Children beyond the
-/// available candidate cells are not placed — a branch can show at most
-/// [kKeyboardCellCount] − 1 children.
+/// open: [parent] sits at [parentIndex] and its children fan into the cells
+/// around it.
+///
+/// Children that have their own children (sub-branches) are placed first, into
+/// the immediate-neighbour ring, so a sub-branch is always exactly one cell from
+/// its parent and reachable in a single hop. Leaf children take the remaining
+/// ring cells and then spill outward, nearest-first. Children beyond the
+/// available cells are not placed.
 List<BranchNode?> placeBranch({
   required BranchNode parent,
   required int parentIndex,
@@ -118,13 +98,29 @@ List<BranchNode?> placeBranch({
 }) {
   final grid = List<BranchNode?>.filled(kKeyboardCellCount, null);
   grid[parentIndex] = parent;
-  final candidates =
-      branchCandidateCells(parentIndex: parentIndex, columns: columns);
-  final limit = candidates.length < parent.children.length
-      ? candidates.length
-      : parent.children.length;
-  for (int i = 0; i < limit; i++) {
-    grid[candidates[i]] = parent.children[i];
+
+  final ring = immediateNeighbors(parentIndex, columns);
+  final outward = outwardCells(parentIndex, columns);
+  var ni = 0, oi = 0;
+  int? nextCell() {
+    if (ni < ring.length) return ring[ni++];
+    if (oi < outward.length) return outward[oi++];
+    return null;
+  }
+
+  // Sub-branches first → guaranteed ring cells (must stay adjacent to parent).
+  for (final child in parent.children) {
+    if (child.children.isNotEmpty) {
+      final cell = nextCell();
+      if (cell != null) grid[cell] = child;
+    }
+  }
+  // Leaves fill the remaining ring cells, then spill outward.
+  for (final child in parent.children) {
+    if (child.children.isEmpty) {
+      final cell = nextCell();
+      if (cell != null) grid[cell] = child;
+    }
   }
   return grid;
 }

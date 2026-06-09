@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'key_data.dart';
@@ -50,6 +51,11 @@ class _KeyboardViewState extends State<KeyboardView> {
   Timer? _drillTimer;
   bool _isBranching = false;
 
+  /// The cell holding the branch's parent while branched (null at the top
+  /// level). Children radiate from here, so target selection is by *direction*
+  /// from this cell rather than which rectangle the finger happens to be over.
+  int? _branchParentCell;
+
   /// Rows are derived from the column count so the grid always holds exactly
   /// [KeyboardView.cellCount] cells (2 cols → 6 rows, 3 → 4, 4 → 3).
   int get _rows => rowsForColumns(widget.columns);
@@ -100,11 +106,14 @@ class _KeyboardViewState extends State<KeyboardView> {
   }
 
   void _handlePointerMove(PointerMoveEvent e, BoxConstraints constraints) {
-    final index = _getIndexFromOffset(e.localPosition, constraints);
+    final index = _resolveTarget(e.localPosition, constraints);
     if (index == _hoveredIndex) return;
     setState(() => _hoveredIndex = index);
     _drillTimer?.cancel();
     if (index == null) return;
+
+    // Don't re-drill the current parent (its dead zone resolves to itself).
+    if (index == _branchParentCell) return;
 
     final node = _activeNodes[index];
     if (node != null && node.children.isNotEmpty) {
@@ -139,6 +148,7 @@ class _KeyboardViewState extends State<KeyboardView> {
     HapticFeedback.mediumImpact();
     setState(() {
       _isBranching = true;
+      _branchParentCell = parentIndex;
       _history.add(List<BranchNode?>.from(_activeNodes));
       _activeNodes = placeBranch(
         parent: node,
@@ -155,7 +165,57 @@ class _KeyboardViewState extends State<KeyboardView> {
       _history.clear();
       _hoveredIndex = null;
       _isBranching = false;
+      _branchParentCell = null;
     });
+  }
+
+  /// Resolves the finger position to a target cell.
+  ///
+  /// At the top level this is a plain grid hit-test. While branched, children
+  /// fan out around the parent, so selection is by *direction and reach* from
+  /// the parent centre instead — a diagonal swipe lands on the diagonal child
+  /// even though the finger passes over a cardinal cell on the way, and a small
+  /// dead zone around the parent keeps the parent itself selected.
+  int? _resolveTarget(Offset pos, BoxConstraints constraints) {
+    final rectIndex = _getIndexFromOffset(pos, constraints);
+    final parentCell = _branchParentCell;
+    if (!_isBranching || parentCell == null) return rectIndex;
+
+    final cols = widget.columns;
+    final cw = constraints.maxWidth / cols;
+    final ch = constraints.maxHeight / _rows;
+    final pr = parentCell ~/ cols, pc = parentCell % cols;
+
+    // Work in cell units so non-square cells don't skew directions.
+    final fx = (pos.dx - (pc + 0.5) * cw) / cw;
+    final fy = (pos.dy - (pr + 0.5) * ch) / ch;
+    final reach = math.sqrt(fx * fx + fy * fy);
+
+    // Dead zone over the parent.
+    if (reach < 0.45) return parentCell;
+
+    int? best;
+    double bestScore = -double.infinity;
+    for (int i = 0; i < _activeNodes.length; i++) {
+      if (i == parentCell || _activeNodes[i] == null) continue;
+      final dx = (i % cols - pc).toDouble();
+      final dy = (i ~/ cols - pr).toDouble();
+      final dist = math.sqrt(dx * dx + dy * dy);
+      if (dist == 0) continue;
+      // Project the finger onto this child's direction; reward alignment
+      // (low lateral offset) and how closely the reach matches the child's
+      // distance (so same-direction children disambiguate by how far you slid).
+      final proj = (fx * dx + fy * dy) / dist;
+      final latX = fx - proj * dx / dist;
+      final latY = fy - proj * dy / dist;
+      final lateral = math.sqrt(latX * latX + latY * latY);
+      final score = -2.0 * lateral - (proj - dist).abs();
+      if (score > bestScore) {
+        bestScore = score;
+        best = i;
+      }
+    }
+    return best ?? rectIndex;
   }
 
   /// What to paint on a key. The committed glyph stays the raw value; only the
