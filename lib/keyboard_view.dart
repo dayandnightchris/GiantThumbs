@@ -23,7 +23,6 @@ class KeyboardView extends StatefulWidget {
   final int drillDelayMs;
 
   final ValueChanged<String> onGlyph;
-  final VoidCallback onSettings;
 
   const KeyboardView({
     super.key,
@@ -31,12 +30,11 @@ class KeyboardView extends StatefulWidget {
     required this.columns,
     required this.opacity,
     required this.onGlyph,
-    required this.onSettings,
     this.drillDelayMs = 220,
   });
 
   /// Total number of cells in the grid. The top-level layout has exactly this
-  /// many keys (1-9, *, 0, ⌫). Shared with the layout editor via
+  /// many keys (1-9, space, 0, ⌫). Shared with the layout editor via
   /// [kKeyboardCellCount].
   static const int cellCount = kKeyboardCellCount;
 
@@ -50,9 +48,7 @@ class _KeyboardViewState extends State<KeyboardView> {
 
   int? _hoveredIndex;
   Timer? _drillTimer;
-  Timer? _settingsTimer;
   bool _isBranching = false;
-  bool _settingsOpened = false;
 
   /// Rows are derived from the column count so the grid always holds exactly
   /// [KeyboardView.cellCount] cells (2 cols → 6 rows, 3 → 4, 4 → 3).
@@ -88,7 +84,6 @@ class _KeyboardViewState extends State<KeyboardView> {
   @override
   void dispose() {
     _drillTimer?.cancel();
-    _settingsTimer?.cancel();
     super.dispose();
   }
 
@@ -97,15 +92,6 @@ class _KeyboardViewState extends State<KeyboardView> {
     if (index == null) return;
     final node = _activeNodes[index];
     setState(() => _hoveredIndex = index);
-
-    // Long-press on ⌫ (top-level only) opens settings; a tap is backspace.
-    if (!_isBranching && node?.glyph == '⌫') {
-      _settingsOpened = false;
-      _settingsTimer = Timer(const Duration(milliseconds: 600), () {
-        setState(() => _settingsOpened = true);
-        widget.onSettings();
-      });
-    }
 
     // Instant first-level branch — the heart of the speed fix.
     if (node != null && node.children.isNotEmpty) {
@@ -136,22 +122,14 @@ class _KeyboardViewState extends State<KeyboardView> {
 
   void _handlePointerUp(PointerUpEvent e) {
     _drillTimer?.cancel();
-    _settingsTimer?.cancel();
-    _settingsTimer = null;
     final idx = _hoveredIndex;
     if (idx != null && idx < _activeNodes.length) {
       final node = _activeNodes[idx];
       if (node != null) {
-        if (node.glyph == '⌫') {
-          // Tap = backspace; a hold already opened settings via the timer.
-          if (!_settingsOpened) {
-            widget.onGlyph('⌫');
-            HapticFeedback.lightImpact();
-          }
-        } else {
-          widget.onGlyph(node.glyph);
-          HapticFeedback.lightImpact();
-        }
+        // Releasing on any cell commits that cell's glyph; the host decides
+        // whether it's text or an action (backspace, menu, …).
+        widget.onGlyph(node.glyph);
+        HapticFeedback.lightImpact();
       }
     }
     _resetGrid();
@@ -172,15 +150,27 @@ class _KeyboardViewState extends State<KeyboardView> {
 
   void _resetGrid() {
     _drillTimer?.cancel();
-    _settingsTimer?.cancel();
-    _settingsTimer = null;
-    _settingsOpened = false;
     setState(() {
       _resetNodes();
       _history.clear();
       _hoveredIndex = null;
       _isBranching = false;
     });
+  }
+
+  /// What to paint on a key. The committed glyph stays the raw value; only the
+  /// label differs for whitespace so blank keys aren't invisible.
+  String _displayGlyph(String? glyph) {
+    switch (glyph) {
+      case null:
+        return '';
+      case ' ':
+        return '␣';
+      case '\n':
+        return '⏎';
+      default:
+        return glyph;
+    }
   }
 
   int? _getIndexFromOffset(Offset localPos, BoxConstraints constraints) {
@@ -235,12 +225,15 @@ class _KeyboardViewState extends State<KeyboardView> {
                 ),
               ),
               alignment: Alignment.center,
-              child: Text(
-                node?.glyph ?? '',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: isHovered ? Colors.tealAccent : Colors.white,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _displayGlyph(node?.glyph),
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: isHovered ? Colors.tealAccent : Colors.white,
+                  ),
                 ),
               ),
             );

@@ -101,9 +101,19 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
   }
 
   void _onGlyph(String g) {
-    if (g == '⌫') {
-      _onDelete();
-      return;
+    switch (g) {
+      case kGlyphBackspace:
+        _onDelete();
+        return;
+      case kGlyphMenu:
+        _openSettings();
+        return;
+      case kGlyphDeleteWord:
+        _onDeleteWord();
+        return;
+      case kGlyphDeleteAll:
+        _onDeleteAll();
+        return;
     }
     _trackWordBoundary(g);
     // In IME mode, send to the focused field; otherwise show locally.
@@ -149,6 +159,32 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
       if (_output.isNotEmpty) {
         setState(() => _output.removeLast());
       }
+      HapticFeedback.mediumImpact();
+    }
+  }
+
+  void _onDeleteWord() {
+    _currentWord = '';
+    if (ImeChannel.isImeMode) {
+      ImeChannel.deleteWord();
+    } else {
+      // Demo: drop trailing space tokens then one word token.
+      setState(() {
+        while (_output.isNotEmpty && _output.last.trim().isEmpty) {
+          _output.removeLast();
+        }
+        if (_output.isNotEmpty) _output.removeLast();
+      });
+      HapticFeedback.mediumImpact();
+    }
+  }
+
+  void _onDeleteAll() {
+    _currentWord = '';
+    if (ImeChannel.isImeMode) {
+      ImeChannel.deleteAll();
+    } else {
+      setState(() => _output.clear());
       HapticFeedback.mediumImpact();
     }
   }
@@ -203,20 +239,18 @@ class _KeyboardDemoPageState extends State<KeyboardDemoPage> {
         opacity: _settings.opacity,
         drillDelayMs: _settings.drillDelayMs,
         onGlyph: _onGlyph,
-        onSettings: _openSettings,
       );
 
   @override
   Widget build(BuildContext context) {
-    // System-keyboard mode: render only the keyboard, filling the IME window
-    // (the native service sizes that window). No demo output box.
+    // System-keyboard mode: render only the keyboard with a transparent
+    // background so the host app shows through the gaps between keys (the keys
+    // themselves honour the opacity setting). The native service sizes the
+    // window. No demo output box.
     if (ImeChannel.isImeMode) {
       return Scaffold(
         backgroundColor: Colors.transparent,
-        body: Container(
-          decoration: const BoxDecoration(gradient: _backgroundGradient),
-          child: SafeArea(top: false, child: _buildKeyboard()),
-        ),
+        body: SafeArea(top: false, child: _buildKeyboard()),
       );
     }
 

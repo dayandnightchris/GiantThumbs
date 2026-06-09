@@ -1,6 +1,7 @@
 package com.giantthumbs.giant_thumbs
 
 import android.content.Intent
+import android.graphics.Color
 import android.inputmethodservice.InputMethodService
 import android.view.View
 import android.view.ViewGroup
@@ -44,6 +45,27 @@ class GiantThumbsIME : InputMethodService() {
                         currentInputConnection?.deleteSurroundingText(1, 0)
                         result.success(null)
                     }
+                    "deleteWord" -> {
+                        val ic = currentInputConnection
+                        if (ic != null) {
+                            val before = ic.getTextBeforeCursor(256, 0) ?: ""
+                            var i = before.length
+                            while (i > 0 && before[i - 1].isWhitespace()) i--
+                            while (i > 0 && !before[i - 1].isWhitespace()) i--
+                            val count = before.length - i
+                            ic.deleteSurroundingText(if (count > 0) count else 1, 0)
+                        }
+                        result.success(null)
+                    }
+                    "deleteAll" -> {
+                        val ic = currentInputConnection
+                        if (ic != null) {
+                            val before = ic.getTextBeforeCursor(100000, 0)?.length ?: 0
+                            val after = ic.getTextAfterCursor(100000, 0)?.length ?: 0
+                            ic.deleteSurroundingText(before, after)
+                        }
+                        result.success(null)
+                    }
                     "launchHostApp" -> {
                         startActivity(
                             Intent(this@GiantThumbsIME, MainActivity::class.java)
@@ -64,12 +86,15 @@ class GiantThumbsIME : InputMethodService() {
     }
 
     override fun onCreateInputView(): View {
-        val fv = FlutterView(this, FlutterTextureView(this))
+        // Non-opaque texture so the host app shows through the transparent gaps
+        // between keys (the keys honour the in-app opacity setting).
+        val textureView = FlutterTextureView(this).apply { isOpaque = false }
+        val fv = FlutterView(this, textureView)
         fv.attachToFlutterEngine(flutterEngine)
         flutterView = fv
 
         // Claim a generous slice of the screen for the "giant thumbs" keyboard.
-        val container = FrameLayout(this)
+        val container = FrameLayout(this).apply { setBackgroundColor(Color.TRANSPARENT) }
         val height = (resources.displayMetrics.heightPixels * KEYBOARD_HEIGHT_FRACTION).toInt()
         container.addView(
             fv,
@@ -80,6 +105,8 @@ class GiantThumbsIME : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        // Let the host app show through the keyboard's transparent areas.
+        window?.window?.setBackgroundDrawableResource(android.R.color.transparent)
         // Drive Flutter rendering while the keyboard is visible, and (re)assert
         // IME mode each time it shows.
         flutterEngine.lifecycleChannel.appIsResumed()

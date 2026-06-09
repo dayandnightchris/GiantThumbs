@@ -44,6 +44,18 @@ class ImeChannel {
     await _channel.invokeMethod('deleteLast');
   }
 
+  /// Delete the word before the cursor (plus any trailing whitespace).
+  static Future<void> deleteWord() async {
+    if (!_imeMode) return;
+    await _channel.invokeMethod('deleteWord');
+  }
+
+  /// Delete everything in the focused field.
+  static Future<void> deleteAll() async {
+    if (!_imeMode) return;
+    await _channel.invokeMethod('deleteAll');
+  }
+
   /// Launch the full Giant Thumbs app — used to reach settings/the layout editor
   /// from inside the IME, where pushing a route into the small keyboard window
   /// would be awkward.
